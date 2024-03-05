@@ -16,7 +16,7 @@ type Movie struct {
 	Year      int32          `json:"year,omitempty" gorm:"column:year"`                 // Movie release year
 	Runtime   Runtime        `json:"runtime,omitempty" gorm:"column:runtime"`           // Movie runtime(in minutes)
 	Genres    pq.StringArray `json:"genres,omitempty" gorm:"column:genres;type:text[]"` // Slice of genres for movie
-	Version   int32          `json:"version" gorm:"column:version;default:1"`           // The version number starts at 1 and increment when movie information updated
+	Version   int32          `json:"version" gorm:"column:version"`                     // The version number starts at 1 and increment when movie information updated
 }
 
 func (Movie) TableName() string { return "movies" }
@@ -40,9 +40,10 @@ type MovieModel struct {
 }
 
 func (m MovieModel) Insert(movie *Movie) error {
-	if err := m.DB.Omit("ID", "CreatedAt").Create(movie).Error; err != nil {
+	if err := m.DB.Omit("ID", "CreatedAt", "Version").Create(movie).Error; err != nil {
 		return err
 	}
+	movie.Version = 1
 	return nil
 }
 
@@ -64,8 +65,20 @@ func (m MovieModel) Get(id int64) (*Movie, error) {
 
 func (m MovieModel) Update(movie *Movie) error {
 	movie.Version += 1
-	if err := m.DB.Save(movie).Error; err != nil {
-		return err
+
+	// at condition on "version" field to avoid data race existing
+	result := m.DB.
+		Model(&movie).
+		Where("version = ?", movie.Version-1).
+		Omit("ID", "CreatedAt").
+		Updates(movie)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return ErrEditConflict
 	}
 	return nil
 }
