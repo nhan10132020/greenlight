@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -40,7 +41,11 @@ type MovieModel struct {
 }
 
 func (m MovieModel) Insert(movie *Movie) error {
-	if err := m.DB.Omit("ID", "CreatedAt", "Version").Create(movie).Error; err != nil {
+	// context 3-second timeout deadline
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if err := m.DB.WithContext(ctx).Omit("ID", "CreatedAt", "Version").Create(movie).Error; err != nil {
 		return err
 	}
 	movie.Version = 1
@@ -52,7 +57,12 @@ func (m MovieModel) Get(id int64) (*Movie, error) {
 		return nil, ErrRecordNotFound
 	}
 	var movie Movie
-	if err := m.DB.Where("id = ?", id).First(&movie).Error; err != nil {
+
+	// context 3-second timeout deadline
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if err := m.DB.WithContext(ctx).Where("id = ?", id).First(&movie).Error; err != nil {
 		switch {
 		case errors.Is(err, gorm.ErrRecordNotFound):
 			return nil, ErrRecordNotFound
@@ -66,8 +76,13 @@ func (m MovieModel) Get(id int64) (*Movie, error) {
 func (m MovieModel) Update(movie *Movie) error {
 	movie.Version += 1
 
+	// context 3-second timeout deadline
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
 	// at condition on "version" field to avoid data race existing
 	result := m.DB.
+		WithContext(ctx).
 		Model(&movie).
 		Where("version = ?", movie.Version-1).
 		Omit("ID", "CreatedAt").
@@ -88,7 +103,11 @@ func (m MovieModel) Delete(id int64) error {
 		return ErrRecordNotFound
 	}
 
-	result := m.DB.Delete(&Movie{}, id)
+	// context 3-second timeout deadline
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	result := m.DB.WithContext(ctx).Delete(&Movie{}, id)
 
 	if err := result.Error; err != nil {
 		return err
