@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lib/pq"
@@ -118,4 +119,37 @@ func (m MovieModel) Delete(id int64) error {
 	}
 
 	return nil
+}
+
+func (m MovieModel) GetAll(title string, genres []string, filters Filters) ([]*Movie, Metadata, error) {
+	// Example Query for this method :
+	// SELECT count(*) OVER() ,id, created_at, title, year, runtime, genres, version
+	// FROM movies
+	// WHERE (to_tsvector('simple', title) @@ plainto_tsquery('simple', ?) OR ? = '') AND (genres @> ? OR ? = '{}')
+	// ORDER BY filters.sortColumn() filters.sortDirection(), id ASC
+	// LIMIT filters.limit() OFFSET filters.offset()
+
+	// context 3-second timeout deadline
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	movies := []*Movie{}
+	var totalRecords int64
+
+	if err := m.DB.
+		WithContext(ctx).
+		Table("movies").
+		Where("(to_tsvector('simple', title) @@ plainto_tsquery('simple', ?) OR ? = '') AND (genres @> ? OR ? = '{}')", title, title, pq.StringArray(genres), pq.StringArray(genres)).
+		Count(&totalRecords).
+		Order(fmt.Sprintf("%s %s, id ASC", filters.sortColumn(), filters.sortDirection())).
+		Limit(filters.limit()).
+		Offset(filters.offset()).
+		Scan(&movies).
+		Error; err != nil {
+		return nil, Metadata{}, err
+	}
+
+	metadata := calculateMetadata(int(totalRecords), filters.Page, filters.PageSize)
+
+	return movies, metadata, nil
 }
