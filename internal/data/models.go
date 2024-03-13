@@ -14,6 +14,7 @@ var (
 type Models struct {
 	Movies MovieModel
 	Users  UserModel
+	Tokens TokenModel
 }
 
 func NewModels(db *gorm.DB) Models {
@@ -22,6 +23,9 @@ func NewModels(db *gorm.DB) Models {
 			DB: db,
 		},
 		Users: UserModel{
+			DB: db,
+		},
+		Tokens: TokenModel{
 			DB: db,
 		},
 	}

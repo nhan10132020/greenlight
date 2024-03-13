@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"strings"
 	"time"
@@ -91,30 +92,61 @@ func (m UserModel) Insert(user *User) error {
 // 	return &user, nil
 // }
 
-// func (m UserModel) Update(user *User) error {
-// 	*user.Version += 1
+func (m UserModel) Update(user *User) error {
+	*user.Version += 1
 
-// 	// context 3-second timeout deadline
-// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-// 	defer cancel()
+	// context 3-second timeout deadline
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
-// 	// at condition on "version" field to avoid data race existing
-// 	result := m.DB.
-// 		WithContext(ctx).
-// 		Model(&user).
-// 		Where("version = ?", *user.Version-1).
-// 		Updates(user)
+	// at condition on "version" field to avoid data race existing
+	result := m.DB.
+		WithContext(ctx).
+		Where("version = ?", *user.Version-1).
+		Updates(user)
 
-// 	if err := result.Error; err != nil {
-// 		switch {
-// 		case err.Error() == `pq: duplicate key value violates unique constraint "users_email_key"`:
-// 			return ErrDuplicateEmail
-// 		case errors.Is(err, gorm.ErrRecordNotFound):
-// 			return ErrEditConflict
-// 		default:
-// 			return err
-// 		}
-// 	}
+	if err := result.Error; err != nil {
+		var perr *pgconn.PgError
+		switch {
+		case errors.As(err, &perr):
+			if perr.Code == "23505" && strings.Contains(perr.Message, "users_email_key") {
+				return ErrDuplicateEmail
+			}
+		default:
+			return err
+		}
+	}
 
-// 	return nil
-// }
+	if result.RowsAffected == 0 {
+		return ErrEditConflict
+	}
+
+	return nil
+}
+
+func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {
+	// calculate the SHA-256 hash of the plaintext token provided by the client
+	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
+
+	var user User
+
+	// context 3-second timeout deadline
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if err := m.DB.
+		WithContext(ctx).
+		Joins("inner join tokens on users.id = tokens.user_id").
+		Where("tokens.hash = ? AND tokens.scope = ? AND tokens.expiry > ?", tokenHash[:], tokenScope, time.Now()).
+		First(&user).
+		Error; err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	return &user, nil
+}
