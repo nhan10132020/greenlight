@@ -13,11 +13,15 @@ var (
 
 type Models struct {
 	Movies MovieModel
+	Users  UserModel
 }
 
 func NewModels(db *gorm.DB) Models {
 	return Models{
 		Movies: MovieModel{
+			DB: db,
+		},
+		Users: UserModel{
 			DB: db,
 		},
 	}

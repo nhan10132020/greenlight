@@ -143,3 +143,21 @@ func (app *application) readInt(qs url.Values, key string, defaultValue int, v *
 
 	return i
 }
+
+// launch backround go routine
+func (app *application) background(fn func()) {
+	app.wg.Add(1)
+	go func() {
+		defer app.wg.Done()
+
+		// run a deferred function to catch any panic, and log error messaage instead
+		// of terminating the application (Because any panic from goroutine won't be catch by recoverPanic middleware or http.Server)
+		defer func() {
+			if err := recover(); err != nil {
+				app.logger.PrintError(fmt.Errorf("%s", err), nil)
+			}
+		}()
+
+		fn()
+	}()
+}
