@@ -16,6 +16,8 @@ var (
 	ErrDuplicateEmail = errors.New("duplicate email")
 )
 
+var AnonymousUser = &User{}
+
 type User struct {
 	ID        int64     `json:"id" gorm:"column:id"`
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
@@ -24,6 +26,10 @@ type User struct {
 	Password  password  `json:"-" gorm:"column:password_hash"`
 	Activated bool      `json:"activated" gorm:"column:activated"`
 	Version   *int      `json:"-" gorm:"column:version;default:1"`
+}
+
+func (u *User) IsAnonymous() bool {
+	return u == AnonymousUser
 }
 
 func (User) TableName() string { return "users" }
@@ -74,23 +80,23 @@ func (m UserModel) Insert(user *User) error {
 	return nil
 }
 
-// func (m UserModel) GetByEmail(email string) (*User, error) {
-// 	var user User
+func (m UserModel) GetByEmail(email string) (*User, error) {
+	var user User
 
-// 	// context 3-second timeout deadline
-// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-// 	defer cancel()
+	// context 3-second timeout deadline
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
-// 	if err := m.DB.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
-// 		switch {
-// 		case errors.Is(err, gorm.ErrRecordNotFound):
-// 			return nil, ErrRecordNotFound
-// 		default:
-// 			return nil, err
-// 		}
-// 	}
-// 	return &user, nil
-// }
+	if err := m.DB.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+	return &user, nil
+}
 
 func (m UserModel) Update(user *User) error {
 	*user.Version += 1

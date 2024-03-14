@@ -12,15 +12,16 @@ import (
 )
 
 const (
-	ScopeActivation = "activation"
+	ScopeActivation     = "activation"
+	ScopeAuthentication = "authentication"
 )
 
 type Token struct {
-	Plaintext string    `gorm:"-"`
-	Hash      []byte    `gorm:"column:hash"`
-	UserID    int64     `gorm:"column:user_id"`
-	Expiry    time.Time `gorm:"column:expiry"`
-	Scope     string    `gorm:"column:scope"`
+	Plaintext string    `json:"token" gorm:"-"`
+	Hash      []byte    `json:"-" gorm:"column:hash"`
+	UserID    int64     `json:"-" gorm:"column:user_id"`
+	Expiry    time.Time `json:"expiry" gorm:"column:expiry"`
+	Scope     string    `json:"-" gorm:"column:scope"`
 }
 
 func (Token) TableName() string { return "tokens" }
