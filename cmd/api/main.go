@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"database/sql"
+	"expvar"
 	"flag"
 	"log"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -102,6 +104,23 @@ func main() {
 	defer postgresDB.Close()
 	logger.PrintInfo("database connection pool established", nil)
 
+	expvar.NewString("version").Set(version)
+
+	// Publish the number of active goroutines.
+	expvar.Publish("goroutines", expvar.Func(func() interface{} {
+		return runtime.NumGoroutine()
+	}))
+
+	// Publish the database connection pool statistics.
+	expvar.Publish("database", expvar.Func(func() interface{} {
+		return postgresDB.Stats()
+	}))
+
+	// Publish the current Unix timestamp.
+	expvar.Publish("timestamp", expvar.Func(func() interface{} {
+		return time.Now().Unix()
+	}))
+
 	app := &application{
 		config: cfg,
 		logger: logger,
@@ -139,10 +158,7 @@ func openDB(cfg config) (*gorm.DB, *sql.DB, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Use PingContext() to establish a new connection to the database, passing in the
-	// context as a parameter. If the connection couldn't be
-	// established successfully within the 5 second deadline, then this will return an
-	// error
+	// Use PingContext() to establish a new connection to the database, with 5-second timeout
 	err = postgresDB.PingContext(ctx)
 	if err != nil {
 		return nil, nil, err
